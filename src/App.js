@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles.css';
 
-const sourceLanguages = ['AUTO', 'AR', 'BG', 'CS', 'DA', 'DE', 'EL', 'EN', 'ES', 'ET', 'FI', 'FR', 'HU', 'ID', 'IT', 'JA', 'KO', 'LT', 'LV', 'NB', 'NL', 'PL', 'PT', 'RO', 'RU', 'SK', 'SL', 'SV', 'TR', 'UK', 'ZH'];
+const sourceLanguages = ['AUTO', 'ZH', 'AR', 'BG', 'CS', 'DA', 'DE', 'EL', 'EN', 'ES', 'ET', 'FI', 'FR', 'HU', 'ID', 'IT', 'JA', 'KO', 'LT', 'LV', 'NB', 'NL', 'PL', 'PT', 'RO', 'RU', 'SK', 'SL', 'SV', 'TR', 'UK'];
 
-const targetLanguages = ['AR', 'BG', 'CS', 'DA', 'DE', 'EL', 'EN', 'EN-GB', 'EN-US', 'ES', 'ET', 'FI', 'FR', 'HU', 'ID', 'IT', 'JA', 'KO', 'LT', 'LV', 'NB', 'NL', 'PL', 'PT', 'PT-BR', 'PT-PT', 'RO', 'RU', 'SK', 'SL', 'SV', 'TR', 'UK', 'ZH', 'ZH-HANS', 'ZH-HANT'];
+const targetLanguages = ['ZH', 'ZH-HANS', 'ZH-HANT', 'AR', 'BG', 'CS', 'DA', 'DE', 'EL', 'EN', 'EN-GB', 'EN-US', 'ES', 'ET', 'FI', 'FR', 'HU', 'ID', 'IT', 'JA', 'KO', 'LT', 'LV', 'NB', 'NL', 'PL', 'PT', 'PT-BR', 'PT-PT', 'RO', 'RU', 'SK', 'SL', 'SV', 'TR', 'UK'];
 
 const App = () => {
     const { t, i18n } = useTranslation();
@@ -27,22 +27,9 @@ const App = () => {
         }
     }, []);
 
-    useEffect(() => {
-        if (autoTranslate && text) {
-            handleTranslate();
-        }
-    }, [text, sourceLang, targetLang, autoTranslate]);
-
-    useEffect(() => {
-        const userLang = navigator.language || navigator.userLanguage;
-        if (['zh', 'de', 'en'].includes(userLang.split('-')[0])) {
-            i18n.changeLanguage(userLang.split('-')[0]);
-        } else {
-            i18n.changeLanguage('en');
-        }
-    }, [i18n]);
-
     const handleTranslate = async () => {
+        if (!text.trim()) return;
+        
         setLoading(true);
         try {
             const body = {
@@ -89,10 +76,58 @@ const App = () => {
         }
     };
 
+    const startTranslateTimer = useCallback((newText) => {
+        if (autoTranslate && newText.trim() && !loading) {
+            if (window.translateTimer) {
+                clearTimeout(window.translateTimer);
+            }
+            window.translateTimer = setTimeout(() => {
+                handleTranslate();
+            }, 1000);
+        }
+    }, [autoTranslate, loading, handleTranslate]);
+
     const handleTextChange = (e) => {
-        setText(e.target.value);
-        setInputCharCount(e.target.value.length);
+        const newText = e.target.value;
+        setText(newText);
+        setInputCharCount(newText.length);
+
+        if (!e.nativeEvent.isComposing && 
+            e.nativeEvent.inputType !== 'insertCompositionText') {
+            startTranslateTimer(newText);
+        }
     };
+
+    const handleComposition = (e) => {
+        if (e.type === 'compositionend') {
+            const newText = e.target.value;
+            startTranslateTimer(newText);
+        }
+    };
+
+    const handlePaste = (e) => {
+        const newText = e.target.value;
+        setText(newText);
+        setInputCharCount(newText.length);
+        startTranslateTimer(newText);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (window.translateTimer) {
+                clearTimeout(window.translateTimer);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        const userLang = navigator.language || navigator.userLanguage;
+        if (['zh', 'de', 'en'].includes(userLang.split('-')[0])) {
+            i18n.changeLanguage(userLang.split('-')[0]);
+        } else {
+            i18n.changeLanguage('en');
+        }
+    }, [i18n]);
 
     const handleOutputChange = (e) => {
         setTranslatedText(e.target.value);
@@ -205,6 +240,9 @@ const App = () => {
                     <textarea
                         value={text}
                         onChange={handleTextChange}
+                        onCompositionStart={handleComposition}
+                        onCompositionEnd={handleComposition}
+                        onPaste={handlePaste}
                         placeholder={t('inputPlaceholder')}
                         rows="10"
                     />
